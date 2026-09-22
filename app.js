@@ -94,8 +94,8 @@ const japaneseAliases={'7203':'トヨタ自動車','6758':'ソニーグループ
 $('#refreshPricesBtn').onclick=async()=>{
  const b=$('#refreshPricesBtn'),hs=getHoldings().filter(h=>h.assetType!=='FUND');if(!hs.length){alert('更新対象の株式・ETFがありません。投資信託は基準価額を手入力してください。');return;}
  b.disabled=true;const prices={},requests=new Map();let ok=0,failed=0;
- try{for(const h of hs){const symbol=h.market==='JP'?h.symbol+'.T':h.symbol;
-  try{if(!requests.has(symbol))requests.set(symbol,quote(symbol));const meta=await requests.get(symbol);if(meta.currency!==(h.market==='US'?'USD':'JPY'))throw Error('通貨不一致');prices[h.key]=meta.regularMarketPrice;ok++;}catch{failed++;}
+ try{for(const h of hs){const symbol=h.market==='JP'?(h.symbol.toUpperCase().endsWith('.T')?h.symbol:h.symbol+'.T'):h.symbol;
+  try{if(!requests.has(symbol))requests.set(symbol,quote(symbol));const meta=await requests.get(symbol);if(meta.currency&&meta.currency!==(h.market==='US'?'USD':'JPY'))throw Error('通貨不一致');prices[h.key]=meta.regularMarketPrice;ok++;}catch{failed++;}
  }
  if(ok&&!commit({...state,prices:{...state.prices,...prices}}))return;
  $('#quoteStatus').textContent=`${ok}件更新、${failed}件取得失敗。`+(failed?'ブラウザからの取得制限や通信障害の可能性があります。既存価格は保持しました。':'Yahoo Financeの価格（遅延の場合があります）。');
