@@ -4,8 +4,8 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const fmt=n=>new Intl.NumberFormat('ja-JP',{maximumFractionDigits:4}).format(n);
 const yen=n=>new Intl.NumberFormat('ja-JP',{style:'currency',currency:'JPY',maximumFractionDigits:0}).format(n);
 let state, blocked=false, originalRaw='';
-try {originalRaw=localStorage.getItem(KEY)||'';state=P.normalize(originalRaw?JSON.parse(originalRaw):{transactions:[],cash:[],prices:{},fx:150});}
-catch(e){blocked=true;state=P.normalize({transactions:[],cash:[],prices:{},fx:150});$('#notice').textContent='保存データを読み込めません。元データは保持しています。「バックアップ」で退避してから修復してください。'+e.message;}
+try {originalRaw=localStorage.getItem(KEY)||'';state=P.normalize(originalRaw?JSON.parse(originalRaw):{transactions:[],cash:[],prices:{},fx:150,lastAccount:'その他'});}
+catch(e){blocked=true;state=P.normalize({transactions:[],cash:[],prices:{},fx:150,lastAccount:'その他'});$('#notice').textContent='保存データを読み込めません。元データは保持しています。「バックアップ」で退避してから修復してください。'+e.message;}
 function commit(next,{restore=false}={}){
  try {
   if(blocked&&!restore)throw Error('元データ保護のため保存を停止しています。バックアップを確認してください。');
@@ -42,12 +42,13 @@ function render(){
 function field(form,name){return form.elements.namedItem(name);}
 function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function assetChanged(){const f=$('#txForm'),type=field(f,'assetType').value;field(f,'priceUnit').value=type==='FUND'?'10000':'1';field(f,'priceUnit').disabled=type!=='FUND';if(type!=='ETF')field(f,'market').value=type==='STOCK_US'?'US':'JP';}
-$('#addTxBtn').onclick=()=>{const f=$('#txForm');f.reset();field(f,'id').value='';field(f,'account').value='その他';field(f,'date').value=today();$('#txForm h2').textContent='取引を追加';assetChanged();$('#txDialog').showModal();};
+$('#addTxBtn').onclick=()=>{const f=$('#txForm');f.reset();field(f,'id').value='';field(f,'account').value=state.lastAccount||'その他';field(f,'date').value=today();$('#txForm h2').textContent='取引を追加';$('#symbolLookupStatus').textContent='';assetChanged();$('#txDialog').showModal();};
 field($('#txForm'),'assetType').onchange=assetChanged;
+const symbolInput=field($('#txForm'),'symbol');if(symbolInput&&typeof symbolInput.addEventListener==='function')symbolInput.addEventListener('blur',async()=>{const f=$('#txForm'),symbol=field(f,'symbol').value.trim().toUpperCase(),status=$('#symbolLookupStatus');if(!symbol)return;status.textContent='銘柄名を取得中…';try{const lookup=await quote(/^\d{4,5}$/.test(symbol)?`${symbol}.T`:symbol),name=lookup.longName||lookup.shortName;if(name&&!field(f,'name').value)field(f,'name').value=name;if(lookup.currency==='USD'){field(f,'market').value='US';if(field(f,'assetType').value==='STOCK_JP')field(f,'assetType').value='STOCK_US';}else if(lookup.currency==='JPY'){field(f,'market').value='JP';if(field(f,'assetType').value==='STOCK_US')field(f,'assetType').value='STOCK_JP';}status.textContent=name?'銘柄名を入力しました。':'価格情報は取得しました。';}catch(error){status.textContent='自動取得できません。銘柄名を入力してください。';}});
 $('#txForm').onsubmit=e=>{
  e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget));
  try{const t=P.transaction({...d,id:d.id||crypto.randomUUID(),quantity:Number(d.quantity),price:Number(d.price),fee:Number(d.fee),priceUnit:Number(d.priceUnit||1)});
- const transactions=[...state.transactions],i=transactions.findIndex(x=>x.id===t.id);if(i<0)transactions.push(t);else transactions[i]=t;
+ const transactions=[...state.transactions],i=transactions.findIndex(x=>x.id===t.id);if(i<0)transactions.push(t);else transactions[i]=t;state.lastAccount=t.account;
  if(commit({...state,transactions}))$('#txDialog').close();
  }catch(error){alert(error.message);}
 };
