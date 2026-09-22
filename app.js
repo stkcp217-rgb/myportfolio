@@ -3,6 +3,7 @@ const P=Portfolio, KEY='myportfolio.v1', $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>new Intl.NumberFormat('ja-JP',{maximumFractionDigits:4}).format(n);
 const yen=n=>new Intl.NumberFormat('ja-JP',{style:'currency',currency:'JPY',maximumFractionDigits:0}).format(n);
+const usd=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:4}).format(n);
 let state, blocked=false, originalRaw='';
 try {originalRaw=localStorage.getItem(KEY)||'';state=P.normalize(originalRaw?JSON.parse(originalRaw):{transactions:[],cash:[],prices:{},fx:150,lastAccount:'その他'});}
 catch(e){blocked=true;state=P.normalize({transactions:[],cash:[],prices:{},fx:150,lastAccount:'その他'});$('#notice').textContent='保存データを読み込めません。元データは保持しています。「バックアップ」で退避してから修復してください。'+e.message;}
@@ -25,11 +26,11 @@ function render(){
  syncAccountSelects();
  const hs=getHoldings();let assets=0,pl=0,unknown=0;
  $('#holdingsTable tbody').innerHTML=hs.map((h,i)=>{
-  const p=state.prices[h.key],avg=h.cost/h.qty*h.priceUnit,rate=h.market==='US'?state.fx:1;
+  const p=state.prices[h.key],avg=h.cost/h.qty*h.priceUnit,rate=h.market==='US'?state.fx:1,isUS=h.market==='US',unit=n=>isUS?usd(n):fmt(n),nativeValue=p===undefined?h.cost:h.qty*p/h.priceUnit,nativeGain=p===undefined?0:nativeValue-h.cost;
   // 現在値が未入力なら取得原価で仮評価し、損益は未算出として明示する。
-  const value=p===undefined?h.cost*rate:h.qty*p/h.priceUnit*rate,g=value-h.cost*rate;
+  const value=nativeValue*rate,g=nativeGain*rate;
   assets+=value;if(p===undefined)unknown++;else pl+=g;
-  return `<tr><td><b>${esc(h.name)}</b><br><small>${esc(h.symbol)}・${esc(h.account)}・${esc(({STOCK_JP:'日本株',STOCK_US:'米国株',FUND:'投資信託',ETF:'ETF'})[h.assetType])}${h.assetType==='FUND'?' / '+h.priceUnit+'口当たり':''}</small></td><td>${fmt(h.qty)}</td><td>${fmt(avg)}</td><td>${p===undefined?'未設定':fmt(p)}<br><button class="icon" data-price-index="${i}">変更</button></td><td>${yen(value)}${p===undefined?'（原価）':''}</td><td>${p===undefined?'未算出':yen(g)}</td><td><button class="icon" data-delete-holding="${i}">削除</button></td></tr>`;
+  return `<tr><td><b>${esc(h.name)}</b><br><small>${esc(h.symbol)}・${esc(h.account)}・${esc(({STOCK_JP:'日本株',STOCK_US:'米国株',FUND:'投資信託',ETF:'ETF'})[h.assetType])}${h.assetType==='FUND'?' / '+h.priceUnit+'口当たり':''}</small></td><td>${fmt(h.qty)}</td><td>${unit(avg)}</td><td>${p===undefined?'未設定':unit(p)}<br><button class="icon" data-price-index="${i}">変更</button></td><td>${p===undefined?unit(nativeValue)+'（原価）':unit(nativeValue)}</td><td>${p===undefined?'未算出':unit(nativeGain)}</td><td><button class="icon" data-delete-holding="${i}">削除</button></td></tr>`;
  }).join('');
  $('#holdingsTable').hidden=!hs.length;$('#holdingsEmpty').hidden=!!hs.length;
  let cash=0;
