@@ -73,6 +73,13 @@ $('#csvFile').onchange=async e=>{try{const file=e.target.files[0];if(!file)retur
  if(imported.some(t=>seen.has(P.fingerprint(t))))throw Error('既存と同一内容の取引があります。重複を確認し、CSVから除いてください');
  P.holdings([...state.transactions,...imported]);if(confirm(imported.length+'件を追加しますか？'))commit({...state,transactions:[...state.transactions,...imported]});
  }catch(error){alert('CSVを取り込めません：'+error.message);}finally{e.target.value='';}};
+async function quote(symbol){
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000),path=encodeURIComponent(symbol);
+ const endpoints=[
+  "https://query1.finance.yahoo.com/v8/finance/chart/"+path+"?range=1d&interval=1d",
+  "https://r.jina.ai/http://query1.finance.yahoo.com/v8/finance/chart/"+path+"?range=1d%26interval=1d"
+ ];let last;
+ try{for(const endpoint of endpoints){try{const response=await fetch(endpoint,{signal:controller.signal,cache:"no-store"});if(!response.ok)throw Error("HTTP "+response.status);const raw=await response.text();let data;try{data=JSON.parse(raw);}catch{const begin=raw.indexOf("{"),end=raw.lastIndexOf("}");if(begin<0||end<=begin)throw Error("JSON形式ではありません");data=JSON.parse(raw.slice(begin,end+1));}const meta=data.chart?.result?.[0]?.meta;if(!meta||!Number.isFinite(meta.regularMarketPrice)||meta.regularMarketPrice<=0||!Number.isFinite(meta.regularMarketTime))throw Error("価格データ不正");return meta;}catch(error){last=error;}}throw last||Error("価格取得失敗");}finally{clearTimeout(timer);}}
 $('#refreshPricesBtn').onclick=async()=>{
  const b=$('#refreshPricesBtn'),hs=getHoldings().filter(h=>h.assetType!=='FUND');if(!hs.length){alert('更新対象の株式・ETFがありません。投資信託は基準価額を手入力してください。');return;}
  b.disabled=true;const prices={},requests=new Map();let ok=0,failed=0;
