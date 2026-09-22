@@ -73,12 +73,6 @@ $('#csvFile').onchange=async e=>{try{const file=e.target.files[0];if(!file)retur
  if(imported.some(t=>seen.has(P.fingerprint(t))))throw Error('既存と同一内容の取引があります。重複を確認し、CSVから除いてください');
  P.holdings([...state.transactions,...imported]);if(confirm(imported.length+'件を追加しますか？'))commit({...state,transactions:[...state.transactions,...imported]});
  }catch(error){alert('CSVを取り込めません：'+error.message);}finally{e.target.value='';}};
-async function quote(symbol){
- const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
- try{const response=await fetch('https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(symbol)+'?range=1d&interval=1d',{signal:controller.signal,cache:'no-store'});if(!response.ok)throw Error('HTTP '+response.status);const data=await response.json(),meta=data.chart?.result?.[0]?.meta;
- if(!meta||!Number.isFinite(meta.regularMarketPrice)||meta.regularMarketPrice<=0||!Number.isFinite(meta.regularMarketTime))throw Error('価格データ不正');return meta;
- }finally{clearTimeout(timer);}
-}
 $('#refreshPricesBtn').onclick=async()=>{
  const b=$('#refreshPricesBtn'),hs=getHoldings().filter(h=>h.assetType!=='FUND');if(!hs.length){alert('更新対象の株式・ETFがありません。投資信託は基準価額を手入力してください。');return;}
  b.disabled=true;const prices={},requests=new Map();let ok=0,failed=0;
