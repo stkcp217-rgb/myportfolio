@@ -18,7 +18,11 @@ function commit(next,{restore=false}={}){
  }catch(e){alert('保存できませんでした：'+e.message);return false;}
 }
 const getHoldings=()=>P.holdings(state.transactions);
+function accountOptions(){return state.accounts?.length?state.accounts:['その他'];}
+function syncAccountSelects(){for(const form of [$('#txForm'),$('#cashForm')]){const select=field(form,'account'),current=select.value;select.innerHTML=accountOptions().map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('');select.value=accountOptions().includes(current)?current:(state.lastAccount&&accountOptions().includes(state.lastAccount)?state.lastAccount:accountOptions()[0]);}}
+function renderAccountList(){const list=$('#accountList');if(!list)return;list.innerHTML=accountOptions().map((a,i)=>`<div class="account-row"><span>${esc(a)}</span>${a==='その他'?'':'<button type="button" class="icon" data-delete-account="'+i+'">削除</button>'}</div>`).join('');}
 function render(){
+ syncAccountSelects();
  const hs=getHoldings();let assets=0,pl=0,unknown=0;
  $('#holdingsTable tbody').innerHTML=hs.map((h,i)=>{
   const p=state.prices[h.key],avg=h.cost/h.qty*h.priceUnit,rate=h.market==='US'?state.fx:1;
@@ -42,7 +46,7 @@ function render(){
 function field(form,name){return form.elements.namedItem(name);}
 function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function assetChanged(){const f=$('#txForm'),type=field(f,'assetType').value;field(f,'priceUnit').value=type==='FUND'?'10000':'1';field(f,'priceUnit').disabled=type!=='FUND';if(type!=='ETF')field(f,'market').value=type==='STOCK_US'?'US':'JP';}
-$('#addTxBtn').onclick=()=>{const f=$('#txForm');f.reset();field(f,'id').value='';field(f,'account').value=state.lastAccount||'その他';field(f,'date').value=today();$('#txForm h2').textContent='取引を追加';$('#symbolLookupStatus').textContent='';assetChanged();$('#txDialog').showModal();};
+$('#addTxBtn').onclick=()=>{const f=$('#txForm');f.reset();field(f,'id').value='';syncAccountSelects();field(f,'account').value=state.lastAccount||'その他';field(f,'date').value=today();$('#txForm h2').textContent='取引を追加';$('#symbolLookupStatus').textContent='';assetChanged();$('#txDialog').showModal();};
 field($('#txForm'),'assetType').onchange=assetChanged;
 const symbolInput=field($('#txForm'),'symbol');if(symbolInput&&typeof symbolInput.addEventListener==='function')symbolInput.addEventListener('blur',async()=>{const f=$('#txForm'),symbol=field(f,'symbol').value.trim().toUpperCase(),status=$('#symbolLookupStatus');if(!symbol)return;status.textContent='銘柄名を取得中…';try{const lookup=await quote(/^\d{4,5}$/.test(symbol)?`${symbol}.T`:symbol);let name=lookup.longName||lookup.shortName;if(lookup.currency==='JPY'){try{name=japaneseAliases[symbol]||await quoteJapaneseName(`${symbol}.T`)||name;}catch{}}if(name&&!field(f,'name').value)field(f,'name').value=name;if(lookup.currency==='USD'){field(f,'market').value='US';if(field(f,'assetType').value==='STOCK_JP')field(f,'assetType').value='STOCK_US';}else if(lookup.currency==='JPY'){field(f,'market').value='JP';if(field(f,'assetType').value==='STOCK_US')field(f,'assetType').value='STOCK_JP';}status.textContent=name?'銘柄名を入力しました。':'価格情報は取得しました。';}catch(error){status.textContent='自動取得できません。銘柄名を入力してください。';}});
 $('#txForm').onsubmit=e=>{
@@ -52,8 +56,10 @@ $('#txForm').onsubmit=e=>{
  if(commit({...state,transactions}))$('#txDialog').close();
  }catch(error){alert(error.message);}
 };
-$('#addCashBtn').onclick=()=>{$('#cashForm').reset();$('#cashDialog').showModal();};
-$('#cashForm').onsubmit=e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget));if(commit({...state,cash:[...state.cash,{account:d.account.trim(),currency:d.currency,amount:Number(d.amount)}]}))$('#cashDialog').close();};
+$('#addCashBtn').onclick=()=>{$('#cashForm').reset();syncAccountSelects();field($('#cashForm'),'account').value=state.lastAccount||'その他';$('#cashDialog').showModal();};
+$('#cashForm').onsubmit=e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget));state.lastAccount=d.account;if(commit({...state,cash:[...state.cash,{account:d.account,currency:d.currency,amount:Number(d.amount)}]}))$('#cashDialog').close();};
+$('#manageAccountsBtn').onclick=()=>{renderAccountList();$('#accountsDialog').showModal();};
+$('#accountForm').onsubmit=e=>{e.preventDefault();const name=field(e.currentTarget,'account').value.trim();if(!name)return;if(accountOptions().includes(name)){alert('同じ口座名は登録済みです。');return;}if(commit({...state,accounts:[...accountOptions(),name]})){e.currentTarget.reset();renderAccountList();}};
 $('#priceForm').onsubmit=e=>{e.preventDefault();const f=e.currentTarget,k=field(f,'key').value,v=Number(field(f,'price').value);if(commit({...state,prices:{...state.prices,[k]:v}}))$('#priceDialog').close();};
 document.addEventListener('click',e=>{
  const b=e.target.closest('button');if(!b)return;
@@ -61,6 +67,7 @@ document.addEventListener('click',e=>{
  if(b.hasAttribute('data-edit')){const t=state.transactions[Number(b.dataset.edit)],f=$('#txForm');for(const [k,v] of Object.entries(t)){const input=field(f,k);if(input)input.value=v;}field(f,'priceUnit').disabled=t.assetType!=='FUND';$('#txForm h2').textContent='取引を編集';$('#txDialog').showModal();}
  if(b.hasAttribute('data-delete-tx')&&confirm('この取引を削除しますか？ 後続の売却が成立しなくなる場合は削除できません。'))commit({...state,transactions:state.transactions.filter((_,i)=>i!==Number(b.dataset.deleteTx))});
  if(b.hasAttribute('data-delete-cash')&&confirm('この現金残高を削除しますか？'))commit({...state,cash:state.cash.filter((_,i)=>i!==Number(b.dataset.deleteCash))});
+ if(b.hasAttribute('data-delete-account')){const i=Number(b.dataset.deleteAccount),name=accountOptions()[i];if(state.transactions.some(t=>t.account===name)||state.cash.some(c=>c.account===name)){alert('使用中の口座は削除できません。');return;}if(confirm(name+'を登録一覧から削除しますか？')){commit({...state,accounts:accountOptions().filter((_,j)=>j!==i)});renderAccountList();}}
  if(b.hasAttribute('data-delete-holding')&&confirm('この保有に属する全取引を削除しますか？')){const h=getHoldings()[Number(b.dataset.deleteHolding)];commit({...state,transactions:state.transactions.filter(t=>P.key(t)!==h.key)});}
  if(b.hasAttribute('data-price-index')){const h=getHoldings()[Number(b.dataset.priceIndex)],f=$('#priceForm');field(f,'key').value=h.key;field(f,'price').value=state.prices[h.key]??'';$('#priceLabel').textContent=`${h.name} / ${h.account} / ${h.market==='US'?'USD':'円'}${h.assetType==='FUND'?'（'+h.priceUnit+'口当たり）':''}`;$('#priceDialog').showModal();}
 });

@@ -1,4 +1,4 @@
-const CACHE='myportfolio-v4-lookup';
+const CACHE='myportfolio-v5-accounts';
 const FILES=['./','index.html','styles.css','core.js','app.js','manifest.webmanifest'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES))));
 self.addEventListener('message',event=>{if(event.data==='ACTIVATE')self.skipWaiting();});

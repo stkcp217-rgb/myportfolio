@@ -43,7 +43,10 @@ function normalize(x){
   const k=key(t),old=t.account+':'+t.assetType+':'+t.market+':'+t.symbol,older=t.market+':'+t.symbol;
   if(prices[k]===undefined){if(prices[old]!==undefined)prices[k]=prices[old]*(t.assetType==='FUND'?10000/t.priceUnit:1);else if(prices[older]!==undefined)prices[k]=prices[older]*(t.assetType==='FUND'?10000/t.priceUnit:1);}
  }
- return {version:2,transactions,cash,prices,fx:number(x.fx??150,'為替',true),fxUpdatedAt:typeof x.fxUpdatedAt==='string'?x.fxUpdatedAt:'',lastAccount:typeof x.lastAccount==='string'?x.lastAccount:'その他',updatedAt:typeof x.updatedAt==='string'?x.updatedAt:''};
+ const accounts=[...new Set((Array.isArray(x.accounts)?x.accounts:[]).filter(a=>typeof a==='string'&&a.trim()).map(a=>a.trim()))];
+ for(const item of [...transactions,...cash])if(!accounts.includes(item.account))accounts.push(item.account);
+ if(!accounts.includes('その他'))accounts.unshift('その他');
+ return {version:2,transactions,cash,prices,fx:number(x.fx??150,'為替',true),fxUpdatedAt:typeof x.fxUpdatedAt==='string'?x.fxUpdatedAt:'',lastAccount:typeof x.lastAccount==='string'?x.lastAccount:'その他',accounts,updatedAt:typeof x.updatedAt==='string'?x.updatedAt:''};
 }
 function parseCsv(input){
  const rows=[];let row=[],cell='',quoted=false,closed=false;

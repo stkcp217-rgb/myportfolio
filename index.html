@@ -18,6 +18,7 @@
 <div class="header-actions">
 <button id="exportBtn" type="button">バックアップ</button>
 <button id="importBtn" type="button">復元</button>
+<button id="manageAccountsBtn" type="button">口座を管理</button>
 <input id="importFile" type="file" accept="application/json" hidden>
 <button id="installBtn" hidden type="button">ホーム画面に追加</button>
 </div>
@@ -119,7 +120,7 @@
 <form id="txForm">
 <input name="id" type="hidden">
 <h2>取引を追加</h2>
-<label>口座名<input name="account" maxlength="40" placeholder="例：SBI証券 NISA" required>
+<label>口座名<select name="account" required></select>
 </label>
 <label>資産種類<select name="assetType">
 <option value="STOCK_JP">日本株</option>
@@ -168,7 +169,7 @@
 <dialog id="cashDialog">
 <form id="cashForm">
 <h2>現金残高を追加</h2>
-<label>口座名<input name="account" maxlength="40" placeholder="例：楽天証券、三井住友銀行" required>
+<label>口座名<select name="account" required></select>
 </label>
 <label>通貨<select name="currency">
 <option value="JPY">日本円</option>
@@ -181,6 +182,14 @@
 <button type="button" data-close>キャンセル</button>
 <button>保存</button>
 </div>
+</form>
+</dialog>
+<dialog id="accountsDialog">
+<form id="accountForm">
+<h2>口座を登録</h2>
+<label>口座名<input name="account" maxlength="40" placeholder="例：SBI証券、楽天証券、三井住友銀行" required></label>
+<div class="actions"><button type="button" data-close>閉じる</button><button>登録</button></div>
+<div id="accountList"></div>
 </form>
 </dialog>
 <dialog id="priceDialog">

@@ -5,3 +5,4 @@
 [hidden]{display:none!important} .head,.header-actions{flex-wrap:wrap;gap:8px} input,select{font-size:16px} button{min-height:44px} main{overflow-wrap:anywhere} dialog{max-height:90dvh;overflow:auto} .cash-item span{display:block} #notice{color:#b91c1c} .fx-setting input{max-width:220px} body{padding-bottom:env(safe-area-inset-bottom)}
 
 #symbolLookupStatus{display:block;color:#64748b;font-size:12px;margin-top:4px}
+.account-row{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e2e8f0;padding:8px 0}
