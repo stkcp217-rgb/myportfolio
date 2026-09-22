@@ -1,0 +1,11 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
+const Q=require('../quotes.js');
+const body=(meta={},extra={})=>JSON.stringify({chart:{result:[{meta:{symbol:'MSFT',currency:'USD',regularMarketPrice:100,...meta},...extra}]}});
+test('中継のテキストから価格を取得し時刻は捏造しない',()=>{const m=Q.parse('Title:\nMarkdown Content:\n'+body(),'MSFT');assert.equal(m.regularMarketPrice,100);assert.equal(m.regularMarketTime,null);});
+test('終値は最後の有効値と対応する時刻を使用',()=>{const m=Q.parse(body({regularMarketPrice:null},{timestamp:[10,20,30],indicators:{quote:[{close:[10,12,null]}]}}),'MSFT');assert.equal(m.regularMarketPrice,12);assert.equal(m.regularMarketTime,20);});
+test('異なる銘柄・通貨不明・エラー応答を拒否',()=>{assert.throws(()=>Q.parse(body({symbol:'OTHER'}),'MSFT'));assert.throws(()=>Q.parse(body({currency:null}),'MSFT'));assert.throws(()=>Q.parse('{"chart":{"error":{"description":"No data"}}}','MSFT'),/No data/);});
+function harness(fetch){let now=100000;const waits=[];const c=vm.createContext({fetch,AbortController,Date:{now:()=>now,parse:Date.parse},setTimeout(fn,ms){if(ms===5000||ms===25000)return 1;waits.push(ms);now+=ms;queueMicrotask(fn);return 2;},clearTimeout(){}});vm.runInContext(fs.readFileSync('quotes.js','utf8'),c);return {Q:c.PortfolioQuotes,waits};}
+const response=(status=200,text=body())=>({ok:status===200,status,headers:{get:()=>null},text:async()=>text});
+test('直接通信が中断しても中継には別のシグナルを使用',async()=>{const signals=[];const h=harness(async(url,opt)=>{signals.push(opt.signal);if(signals.length===1){const e=new Error();e.name='AbortError';throw e;}return response();});assert.equal((await h.Q.quote('MSFT')).regularMarketPrice,100);assert.notEqual(signals[0],signals[1]);});
+test('429応答は待機して再試行し、中継通信の間隔を確保',async()=>{let count=0;const h=harness(async()=>response(++count===1?429:200));await h.Q.request('relay',true);await h.Q.request('relay',true);assert.equal(count,3);assert.ok(h.waits.includes(65000));assert.ok(h.waits.includes(3500));});
+test('56件同時要求でも中継は直列化され1分20回未満',async()=>{let count=0;const h=harness(async()=>{count++;return response();});await Promise.all(Array.from({length:56},()=>h.Q.request('relay',true)));assert.equal(count,56);assert.equal(h.waits.filter(ms=>ms===3500).length,55);});
