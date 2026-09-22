@@ -44,6 +44,22 @@ async function quote(symbol){
  }
  throw Error(errors.join(' / '));
 }
-root.PortfolioQuotes={quote,parse,request};
+// Supported funds use a NAV quoted in JPY per 10,000 units.
+const fundCodes=new Set(['2931113C','9I312179','03319172','03312175','03311187','0331418A']);
+function parseFund(raw,code){
+ if(!fundCodes.has(code))throw Error('この投信コードは自動取得未対応です');
+ if(!raw.includes('【'+code+'】')||!raw.includes('基準価額・投資信託情報'))throw Error('投信コードまたはページ種別を確認できません');
+ const escaped=code.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+ const re=new RegExp('\\[ポートフォリオに追加\\]\\(https://finance\\.yahoo\\.co\\.jp/portfolio/create\\?add='+escaped+'\\)\\s+([\\d,]+(?:\\.\\d+)?)\\s+前日比[^\\n]*\\s+\\*\\s+(\\d{1,2}/\\d{1,2})');
+ const m=raw.match(re),price=m?Number(m[1].replace(/,/g,'')):NaN;
+ if(!Number.isFinite(price)||price<=0)throw Error('基準価額と基準日を確認できません（ページ形式変更の可能性）');
+ return {symbol:code,currency:'JPY',regularMarketPrice:price,regularMarketTime:null,asOf:m[2],priceUnit:10000};
+}
+async function fundQuote(code){
+ code=code.trim().toUpperCase();
+ if(!fundCodes.has(code))throw Error('この投信コードは自動取得未対応です。基準価額を手入力してください');
+ return parseFund(await request('https://r.jina.ai/http://finance.yahoo.co.jp/quote/'+encodeURIComponent(code),true),code);
+}
+root.PortfolioQuotes={quote,parse,request,fundQuote,parseFund};
 if(typeof module!=='undefined')module.exports=root.PortfolioQuotes;
 })(globalThis);

@@ -1,5 +1,8 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 const Q=require('../quotes.js');
+const fundPage='Title: eMAXIS Slim【0331418A】\n[ポートフォリオに追加](https://finance.yahoo.co.jp/portfolio/create?add=0331418A)\n\n37,532\n\n前日比+371(+1.00%)\n\n*   9/18\n\n# 基準価額・投資信託情報\n純資産 13,704,051';
+test('投信の基準価額を純資産と混同せず1万口単価で取得',()=>{const m=Q.parseFund(fundPage,'0331418A');assert.equal(m.regularMarketPrice,37532);assert.equal(m.priceUnit,10000);assert.equal(m.asOf,'9/18');const P=require('../core.js'),t=P.transaction({id:'fund',date:'2026-09-22',market:'JP',side:'BUY',symbol:'0331418A',name:'オルカン',assetType:'FUND',quantity:14389,price:37181.18,priceUnit:10000});const h=P.holdings([t])[0];assert.equal(Math.round(h.qty*m.regularMarketPrice/h.priceUnit),54005);});
+test('投信ページ誤一致・日付欠落・未対応コードを拒否',()=>{assert.throws(()=>Q.parseFund(fundPage,'03311187'));assert.throws(()=>Q.parseFund(fundPage.replace('*   9/18',''),'0331418A'));assert.throws(()=>Q.parseFund(fundPage,'UNKNOWN'));});
 const body=(meta={},extra={})=>JSON.stringify({chart:{result:[{meta:{symbol:'MSFT',currency:'USD',regularMarketPrice:100,...meta},...extra}]}});
 test('中継のテキストから価格を取得し時刻は捏造しない',()=>{const m=Q.parse('Title:\nMarkdown Content:\n'+body(),'MSFT');assert.equal(m.regularMarketPrice,100);assert.equal(m.regularMarketTime,null);});
 test('終値は最後の有効値と対応する時刻を使用',()=>{const m=Q.parse(body({regularMarketPrice:null},{timestamp:[10,20,30],indicators:{quote:[{close:[10,12,null]}]}}),'MSFT');assert.equal(m.regularMarketPrice,12);assert.equal(m.regularMarketTime,20);});

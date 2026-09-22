@@ -86,15 +86,16 @@ async function quote(symbol){return PortfolioQuotes.quote(symbol);}
 async function quoteJapaneseName(symbol){const path=encodeURIComponent(symbol),endpoints=["https://query1.finance.yahoo.com/v1/finance/search?q="+path+"&lang=ja-JP&region=JP","https://r.jina.ai/http://query1.finance.yahoo.com/v1/finance/search?q="+path+"&lang=ja-JP&region=JP","https://r.jina.ai/http://finance.yahoo.co.jp/quote/"+path];for(const endpoint of endpoints){try{const response=await PortfolioQuotes.request(endpoint,endpoint.startsWith('https://r.jina.ai/')).then(raw=>({ok:true,text:async()=>raw}));if(!response.ok)continue;const raw=await response.text();let data;try{data=JSON.parse(raw);}catch{const begin=raw.indexOf('{'),end=raw.lastIndexOf('}');if(begin>=0&&end>begin){try{data=JSON.parse(raw.slice(begin,end+1));}catch{}}}const quote=data?.quotes?.find(x=>x.symbol===symbol)||data?.quotes?.[0];const name=quote?.shortname||quote?.longname;if(name&&/[\u3040-\u30ff\u3400-\u9fff]/.test(name))return name;const heading=raw.match(/(?:^|\n)#\s*([^\n【：:]+)(?:【|：|:)/)?.[1]?.trim();if(heading&&/[\u3040-\u30ff\u3400-\u9fff]/.test(heading))return heading;}catch{}}return '';}
 const japaneseAliases={'7203':'トヨタ自動車','6758':'ソニーグループ','9984':'ソフトバンクグループ','8306':'三菱UFJフィナンシャル・グループ','9432':'日本電信電話','9433':'KDDI','8058':'三菱商事','6861':'キーエンス','6501':'日立製作所','7267':'本田技研工業','7269':'スズキ','7974':'任天堂','2914':'日本たばこ産業','4502':'武田薬品工業','4063':'信越化学工業','8035':'東京エレクトロン','8411':'みずほフィナンシャルグループ','8316':'三井住友フィナンシャルグループ'};
 $('#refreshPricesBtn').onclick=async()=>{
- const b=$('#refreshPricesBtn'),hs=getHoldings().filter(h=>h.assetType!=='FUND');if(!hs.length){alert('更新対象の株式・ETFがありません。投資信託は基準価額を手入力してください。');return;}
- b.disabled=true;const prices={},requests=new Map(),failures=[];let ok=0,failed=0;
+ const b=$('#refreshPricesBtn'),hs=getHoldings();if(!hs.length){alert('更新対象の保有銘柄がありません。');return;}
+ b.disabled=true;const prices={},requests=new Map(),failures=[],fundDates=[];let ok=0,failed=0;
  $('#quoteStatus').textContent='株価を取得中。多数の銘柄は数分かかります。';
- try{for(const h of hs){const symbol=h.market==='JP'?(h.symbol.toUpperCase().endsWith('.T')?h.symbol:h.symbol+'.T'):h.symbol;
-  try{if(!requests.has(symbol))requests.set(symbol,quote(symbol));const meta=await requests.get(symbol);if(meta.currency!==(h.market==='US'?'USD':'JPY'))throw Error('通貨不一致');prices[h.key]=meta.regularMarketPrice;ok++;}catch(error){failed++;failures.push(`${h.symbol}（${h.account}）：${error.message}`);}
+ try{for(const h of hs){const symbol=h.assetType==='FUND'?h.symbol:h.market==='JP'?(h.symbol.toUpperCase().endsWith('.T')?h.symbol:h.symbol+'.T'):h.symbol;
+  const requestKey=(h.assetType==='FUND'?'fund:':'stock:')+symbol;
+  try{if(!requests.has(requestKey))requests.set(requestKey,h.assetType==='FUND'?PortfolioQuotes.fundQuote(symbol):quote(symbol));const meta=await requests.get(requestKey);if(meta.currency!==(h.market==='US'?'USD':'JPY'))throw Error('通貨不一致');prices[h.key]=meta.regularMarketPrice;if(h.assetType==='FUND')fundDates.push(`${h.name}：${meta.asOf}基準`);ok++;}catch(error){failed++;failures.push(`${h.symbol}（${h.account}）：${error.message}`);}
  $('#quoteStatus').textContent=`${ok+failed}/${hs.length}件確認、${ok}件成功、${failed}件失敗。取得制限を避けながら更新しています。`;
  }
  if(ok&&!commit({...state,prices:{...state.prices,...prices}}))return;
- $('#quoteStatus').textContent=`${ok}件更新、${failed}件取得失敗。`+(failed?'既存価格は保持しました。失敗銘柄：'+failures.join(' ／ '):'Yahoo Financeの価格（遅延の場合があります）。');
+ $('#quoteStatus').textContent=`${ok}件更新、${failed}件取得失敗。`+(failed?'既存価格は保持しました。失敗銘柄：'+failures.join(' ／ '):'Yahoo Financeの価格（遅延の場合があります）。')+(fundDates.length?' 投信は1万口当たり。'+fundDates.join(' ／ '):'');
  }finally{b.disabled=false;}
 };
 $('#refreshFx').onclick=async()=>{const b=$('#refreshFx');b.disabled=true;try{const m=await quote('USDJPY=X');if(m.currency!=='JPY')throw Error('通貨不一致');commit({...state,fx:m.regularMarketPrice,fxUpdatedAt:m.regularMarketTime===null?'':new Date(m.regularMarketTime*1000).toISOString()});}catch{$('#fxStatus').textContent='為替取得に失敗しました。ブラウザからの取得制限や通信障害が考えられます。手入力で保存できます。';}finally{b.disabled=false;}};
