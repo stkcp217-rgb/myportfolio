@@ -19,7 +19,7 @@ function commit(next,{restore=false}={}){
 }
 const getHoldings=()=>P.holdings(state.transactions);
 function accountOptions(){return state.accounts?.length?state.accounts:['その他'];}
-function syncAccountSelects(){for(const form of [$('#txForm'),$('#cashForm')]){const select=field(form,'account'),current=select.value;select.innerHTML=accountOptions().map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('');select.value=accountOptions().includes(current)?current:(state.lastAccount&&accountOptions().includes(state.lastAccount)?state.lastAccount:accountOptions()[0]);}}
+function syncAccountSelects(){for(const form of [$('#txForm'),$('#cashForm')]){const select=field(form,'account'),current=select.value;select.innerHTML=accountOptions().map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('');select.value=accountOptions().includes(current)?current:(state.lastAccount&&accountOptions().includes(state.lastAccount)?state.lastAccount:accountOptions()[0]);}const csv=$('#csvAccount');if(csv){const current=csv.value;csv.innerHTML=accountOptions().map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('');csv.value=accountOptions().includes(current)?current:(state.lastAccount&&accountOptions().includes(state.lastAccount)?state.lastAccount:accountOptions()[0]);}}
 function renderAccountList(){const list=$('#accountList');if(!list)return;list.innerHTML=accountOptions().map((a,i)=>`<div class="account-row"><span>${esc(a)}</span>${a==='その他'?'':'<button type="button" class="icon" data-delete-account="'+i+'">削除</button>'}</div>`).join('');}
 function render(){
  syncAccountSelects();
@@ -77,7 +77,7 @@ $('#exportBtn').onclick=()=>download(blocked?originalRaw:JSON.stringify(state,nu
 $('#importBtn').onclick=()=>$('#importFile').click();
 $('#importFile').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>10*1024*1024)throw Error('ファイルは10MB以下にしてください');const candidate=P.normalize(JSON.parse(await file.text()));if(confirm('現在のデータを置き換えます。バックアップ保存済みですか？'))commit(candidate,{restore:true});}catch(error){alert('復元できません：'+error.message);}finally{e.target.value='';}};
 $('#csvImportBtn').onclick=()=>$('#csvFile').click();
-$('#csvFile').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>10*1024*1024)throw Error('ファイルは10MB以下にしてください');const imported=P.importCsv(await file.text(),()=>crypto.randomUUID()),seen=new Set(state.transactions.map(P.fingerprint));
+$('#csvFile').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>10*1024*1024)throw Error('ファイルは10MB以下にしてください');const bytes=new Uint8Array(await file.arrayBuffer()),utf=new TextDecoder('utf-8').decode(bytes),text=([...utf].filter(c=>c==='�').length>2||utf.includes('\u0000'))?new TextDecoder('shift_jis').decode(bytes):utf,imported=P.importCsv(text,()=>crypto.randomUUID(),{defaultAccount:$('#csvAccount').value||'その他'}),seen=new Set(state.transactions.map(P.fingerprint));
  if(imported.some(t=>seen.has(P.fingerprint(t))))throw Error('既存と同一内容の取引があります。重複を確認し、CSVから除いてください');
  P.holdings([...state.transactions,...imported]);if(confirm(imported.length+'件を追加しますか？'))commit({...state,transactions:[...state.transactions,...imported]});
  }catch(error){alert('CSVを取り込めません：'+error.message);}finally{e.target.value='';}};

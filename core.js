@@ -61,13 +61,20 @@ function parseCsv(input){
  if(quoted)fail('CSVの引用符が閉じていません');
  row.push(cell);if(row.some(v=>v!==''))rows.push(row);return rows;
 }
-function importCsv(input,idFactory){
- const rows=parseCsv(input),headers=rows.shift()?.map(s=>s.trim());
- const required=['date','market','side','symbol','name','quantity','price','fee'];
- const allowed=[...required,'account','assetType','priceUnit'];
- if(!headers||required.some(h=>!headers.includes(h))||new Set(headers).size!==headers.length||headers.some(h=>!allowed.includes(h)))fail('共通CSV形式のみ対応しています。証券会社CSVはまだ直接取り込めません');
+function importCsv(input,idFactory,options={}){
+ const rows=parseCsv(input),rawHeaders=rows.shift()?.map(s=>s.trim());
+ if(!rawHeaders||new Set(rawHeaders).size!==rawHeaders.length)fail('CSVの見出しが不正です');
+ const clean=h=>h.toLowerCase().replace(/[\s　_\-（）()]/g,'');
+ const aliases={date:['date','日付','約定日','取引日','受渡日'],market:['market','市場','取引市場'],side:['side','売買','売買区分','取引区分','取引'],symbol:['symbol','銘柄コード','コード','ティッカー','銘柄'],name:['name','銘柄名','商品名','銘柄名称'],quantity:['quantity','数量','約定数量','取引数量','口数'],price:['price','単価','約定単価','約定価格','価格'],fee:['fee','手数料','委託手数料','取引手数料','手数料等'],account:['account','口座','口座名'],assetType:['assettype','資産種類','商品種別'],priceUnit:['priceunit','価格単位','単価単位']};
+ const index={};for(const [key,names] of Object.entries(aliases)){const found=rawHeaders.findIndex(h=>names.includes(clean(h)));if(found>=0)index[key]=found;}
+ const common=rawHeaders.includes('date')&&rawHeaders.includes('market')&&rawHeaders.includes('side')&&rawHeaders.includes('symbol')&&rawHeaders.includes('name')&&rawHeaders.includes('quantity')&&rawHeaders.includes('price')&&rawHeaders.includes('fee');
+ if(!common&&['date','side','symbol','quantity','price'].some(k=>index[k]===undefined))fail('対応していないCSV形式です。日付・売買・銘柄コード・数量・単価の列を確認してください');
  if(!rows.length)fail('CSVに取引がありません');
- return rows.map((r,i)=>{try{if(r.length!==headers.length)fail('列数が一致しません');const t=Object.fromEntries(headers.map((h,j)=>[h,r[j].trim()]));for(const f of ['quantity','price','fee']){if(!t[f])fail(f+'が空欄です');t[f]=Number(t[f]);}if(t.assetType==='FUND'&&!t.priceUnit)fail('投資信託にはpriceUnit（通常10000）が必要です');t.priceUnit=t.priceUnit?Number(t.priceUnit):1;t.account=t.account||'その他';return transaction({...t,id:idFactory()});}catch(e){fail('CSV '+(i+2)+'行目：'+e.message);}});
+ const value=(r,k)=>index[k]===undefined?'':(r[index[k]]??'').trim();
+ const dateValue=v=>{const s=v.trim().replace(/[年月]/g,'-').replace(/日/g,'').replace(/[./]/g,'-').split(/[ T]/)[0],m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);return m?`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`:s;};
+ const num=v=>Number(String(v).replace(/[",￥¥円]/g,'').replace(/,/g,'').replace(/[()]/g,''));
+ const sideValue=v=>{const s=v.toLowerCase();if(/買|buy/.test(s))return'BUY';if(/売|sell/.test(s))return'SELL';return v;};
+ return rows.map((r,i)=>{try{if(r.length!==rawHeaders.length)fail('列数が一致しません');const symbol=value(r,'symbol').replace(/\s/g,'').toUpperCase(),marketRaw=value(r,'market'),market=common?marketRaw:(/米国|us|nyse|nasdaq/i.test(marketRaw)?'US':/日本|jp|東証|東京/i.test(marketRaw)?'JP':/^\d{4,5}$/.test(symbol)?'JP':'US'),assetType=value(r,'assetType')|| (market==='US'?'STOCK_US':'STOCK_JP');if(common&&assetType==='FUND'&&index.priceUnit===undefined)fail('投資信託にはpriceUnit（通常10000）が必要です');const t={date:dateValue(value(r,'date')),market,side:common?value(r,'side'):sideValue(value(r,'side')),symbol,name:value(r,'name')||symbol,quantity:num(value(r,'quantity')),price:num(value(r,'price')),fee:index.fee===undefined?0:num(value(r,'fee')),account:value(r,'account')||options.defaultAccount||'その他',assetType,priceUnit:index.priceUnit===undefined?(assetType==='FUND'?10000:1):num(value(r,'priceUnit'))};return transaction({...t,id:idFactory()});}catch(e){fail('CSV '+(i+2)+'行目：'+e.message);}});
 }
 const fingerprint=t=>JSON.stringify([t.date,t.account,t.assetType,t.market,t.side,t.symbol,t.quantity,t.price,t.fee,t.priceUnit]);
 const api={transaction,key,holdings,normalize,parseCsv,importCsv,fingerprint};

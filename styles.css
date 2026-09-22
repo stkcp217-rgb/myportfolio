@@ -6,3 +6,4 @@
 
 #symbolLookupStatus{display:block;color:#64748b;font-size:12px;margin-top:4px}
 .account-row{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e2e8f0;padding:8px 0}
+.csv-account{display:inline-flex;align-items:center;gap:4px;margin:0;font-size:12px;font-weight:400}.csv-account select{display:inline-block;width:auto;margin:0;padding:5px;font-size:13px}
