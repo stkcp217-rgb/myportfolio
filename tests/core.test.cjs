@@ -1,0 +1,16 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),P=require('../core.js');
+const tx=(id,date,side,q,p,extra={})=>({id,date,side,quantity:q,price:p,fee:0,market:'JP',symbol:'7203',name:'テスト',account:'SBI',assetType:'STOCK_JP',priceUnit:1,...extra});
+const state=transactions=>({transactions,cash:[],prices:{},fx:150});
+test('過去取引追加後も日付順の移動平均',()=>{const h=P.holdings([tx('b','2026-01-02','BUY',10,200),tx('s','2026-01-03','SELL',10,300),tx('a','2026-01-01','BUY',10,100)])[0];assert.equal(h.qty,10);assert.equal(h.cost,1500);});
+test('投信1万口単価と手数料',()=>{const h=P.holdings([tx('f','2026-01-01','BUY',10000,12000,{assetType:'FUND',priceUnit:10000,fee:10})])[0];assert.equal(h.cost,12010);assert.equal(h.cost/h.qty*10000,12010);});
+test('口座別集計とキーの衝突防止',()=>{const a=tx('a','2026-01-01','BUY',10,100),b=tx('b','2026-01-01','BUY',20,200,{account:'楽天'});assert.equal(P.holdings([a,b]).length,2);assert.notEqual(P.key(a),P.key(b));});
+test('完売済み売却の価格編集',()=>assert.equal(P.normalize(state([tx('a','2026-01-01','BUY',10,100),tx('s','2026-01-02','SELL',10,250)])).transactions.length,2));
+test('買い削除後・過去日付の過剰売却を拒否',()=>{assert.throws(()=>P.normalize(state([tx('s','2026-01-01','SELL',1,100)])));assert.throws(()=>P.normalize(state([tx('b','2026-01-02','BUY',10,100),tx('s','2026-01-01','SELL',1,100)])));});
+test('不正バックアップを全体拒否',()=>{for(const t of [null,{...tx('a','2026-02-30','BUY',1,2)},{...tx('a','2026-01-01','BUY',1,2),quantity:Infinity}])assert.throws(()=>P.normalize(state([t])));assert.throws(()=>P.normalize({...state([]),prices:null}));});
+test('旧価格キーと旧投信単位を保持',()=>{const t=tx('f','2026-01-01','BUY',10,20,{assetType:'FUND'});delete t.priceUnit;const s=P.normalize({...state([t]),prices:{'JP:7203':50}});assert.equal(s.prices[P.key(s.transactions[0])],500000);assert.equal(s.transactions[0].priceUnit,1);});
+test('CSV引用符・空欄・改行・BOM',()=>assert.deepEqual(P.parseCsv('\ufeffa,b,c\r\n"x,y","a""b","line\nnext"\r\n'),[['a','b','c'],['x,y','a"b','line\nnext']]));
+test('CSV不正市場を日本株にすり替えない',()=>assert.throws(()=>P.importCsv('date,market,side,symbol,name,quantity,price,fee\n2026-01-01,INVALID,BUY,A,A,10,20,0',()=> 'a')));
+test('投信CSVに単位必須',()=>assert.throws(()=>P.importCsv('date,market,side,symbol,name,quantity,price,fee,assetType\n2026-01-01,JP,BUY,A,A,10000,12000,0,FUND',()=> 'a')));
+test('負手数料・文字列数値・ID重複を拒否',()=>{assert.throws(()=>P.normalize(state([tx('a','2026-01-01','BUY',1,2,{fee:-1})])));assert.throws(()=>P.normalize(state([tx('a','2026-01-01','BUY','1',2)])));assert.throws(()=>P.normalize(state([tx('a','2026-01-01','BUY',1,2),tx('a','2026-01-01','BUY',1,2)])));});
+
+test("投信は単価単位が異なっても同一保有",()=>{const h=P.holdings([tx("a","2026-01-01","BUY",10000,1.2,{assetType:"FUND",priceUnit:1}),tx("b","2026-01-02","SELL",5000,13000,{assetType:"FUND",priceUnit:10000})])[0];assert.equal(h.qty,5000);assert.equal(h.cost,6000);assert.equal(h.priceUnit,10000);});

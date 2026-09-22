@@ -19,6 +19,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Regression checks
+        run: |
+          node --test tests/core.test.cjs tests/storage.test.cjs
+          node --check app.js
+          node --check sw.js
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
