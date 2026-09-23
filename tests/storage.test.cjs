@@ -1,8 +1,8 @@
-const {test}=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),P=require('../core.js');
+const {test}=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),P=require('../core.js'),Planning=require('../planning.js');
 function boot(raw=''){
  const nodes=new Map(),data=new Map(raw?[['myportfolio.v1',raw]]:[]),alerts=[];let reject=false;
  const document={querySelector(s){if(!nodes.has(s))nodes.set(s,{value:'',textContent:'',innerHTML:'',hidden:false,elements:{namedItem(){return {};}}});return nodes.get(s);},addEventListener(){}};
- const c=vm.createContext({Portfolio:P,document,localStorage:{getItem:k=>data.get(k)??null,setItem(k,v){if(reject)throw Error('QuotaExceededError');data.set(k,v);}},alert:x=>alerts.push(x),navigator:{},addEventListener(){},Intl,Date,console,setTimeout,clearTimeout});
+ const c=vm.createContext({Portfolio:P,PortfolioPlanning:Planning,document,localStorage:{getItem:k=>data.get(k)??null,setItem(k,v){if(reject)throw Error('QuotaExceededError');data.set(k,v);}},alert:x=>alerts.push(x),navigator:{},addEventListener(){},fetch:async()=>({ok:true,json:async()=>({dates:[]})}),Intl,Date,console,setTimeout,clearTimeout});
  vm.runInContext(fs.readFileSync('app.js','utf8'),c);
  return {c,data,alerts,nodes,reject:()=>{reject=true;},run:s=>vm.runInContext(s,c)};
 }
