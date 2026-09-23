@@ -52,13 +52,15 @@
 <div class="head">
 <h2>保有銘柄</h2>
 <div>
-<button id="refreshPricesBtn" type="button">株価・基準価額を更新</button>
+<button id="refreshPricesBtn" type="button">表示中の価格を更新</button>
+<button id="copyQuoteSymbolsBtn" type="button">銘柄コードだけコピー</button>
 <button id="addTxBtn">取引を追加</button>
 </div>
 </div>
 <div class="row"><label>表示<select id="holdingGroup"><option value="all">すべて</option><option value="stock">株式・ETF</option><option value="fund">投資信託</option><option value="tsumitate">つみたてNISA・つみたて投資枠</option></select></label><label>並び順<select id="holdingSort"><option value="symbol">ティッカー・コード順</option><option value="name">銘柄名順</option><option value="account">口座順</option><option value="value">評価額が大きい順</option></select></label></div>
 <label>証券口座で絞り込み<select id="holdingAccount"><option value="">全口座</option></select></label><p id="holdingSummary" role="status"></p><p id="quoteStatus" role="status">
 </p>
+<p>口座・資産種類で絞ると更新対象を減らせます。取得できた価格は1件ずつ保存します。</p>
 <p>米国資産の円換算損益には買付時の為替を使用します。未入力の買付分は現在の為替で暫定換算します。売却益、配当、NISAの非課税枠は管理しません。</p><div id="holdingsEmpty" class="empty">該当する保有銘柄はありません。</div>
 <div class="scroll">
 <table id="holdingsTable" hidden>

@@ -3,6 +3,9 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '30 10 * * 1-5'
+    - cron: '30 22 * * 0-4'
 permissions:
   contents: read
   pages: write
@@ -12,6 +15,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   deploy:
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -25,6 +29,9 @@ jobs:
           node --check quotes.js
           node --check app.js
           node --check sw.js
+          node --check scripts/update-quotes.cjs
+      - name: Update public market quotes
+        run: node scripts/update-quotes.cjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

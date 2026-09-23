@@ -80,7 +80,7 @@ $('#addCashBtn').onclick=()=>{$('#cashForm').reset();field($('#cashForm'),'editI
 $('#cashForm').onsubmit=e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget)),item={account:d.account,currency:d.currency,amount:Number(d.amount),...(d.currency==='USD'&&d.fxRate?{fxRate:Number(d.fxRate)}:{})},cash=[...state.cash];if(d.editIndex==='')cash.push(item);else cash[Number(d.editIndex)]=item;if(commit({...state,lastAccount:d.account,cash}))$('#cashDialog').close();};
 $('#manageAccountsBtn').onclick=()=>{renderAccountList();$('#accountsDialog').showModal();};
 $('#accountForm').onsubmit=e=>{e.preventDefault();const name=field(e.currentTarget,'account').value.trim();if(!name)return;if(accountOptions().includes(name)){alert('同じ口座名は登録済みです。');return;}if(commit({...state,accounts:[...accountOptions(),name]})){e.currentTarget.reset();renderAccountList();}};
-$('#priceForm').onsubmit=e=>{e.preventDefault();const f=e.currentTarget,k=field(f,'key').value,v=Number(field(f,'price').value);if(commit({...state,prices:{...state.prices,[k]:v}}))$('#priceDialog').close();};
+$('#priceForm').onsubmit=e=>{e.preventDefault();const f=e.currentTarget,k=field(f,'key').value,v=Number(field(f,'price').value),autoPriceAt={...state.autoPriceAt};delete autoPriceAt[k];if(commit({...state,prices:{...state.prices,[k]:v},priceDates:{...state.priceDates,[k]:'手入力'},manualPrices:[...new Set([...state.manualPrices,k])],autoPriceAt}))$('#priceDialog').close();};
 $('#yenCostForm').onsubmit=e=>{e.preventDefault();const f=e.currentTarget,k=field(f,'key').value,v=Number(field(f,'yenAvgCost').value);if(commit({...state,yenAvgCosts:{...state.yenAvgCosts,[k]:v}}))$('#yenCostDialog').close();};
 $('#clearYenCost').onclick=()=>{const k=field($('#yenCostForm'),'key').value,values={...state.yenAvgCosts};delete values[k];if(commit({...state,yenAvgCosts:values}))$('#yenCostDialog').close();};
 document.addEventListener('click',async e=>{
@@ -97,7 +97,7 @@ document.addEventListener('click',async e=>{
  if(b.hasAttribute('data-yen-cost')){const h=displayedHoldings[Number(b.dataset.yenCost)],f=$('#yenCostForm');field(f,'key').value=h.key;field(f,'yenAvgCost').value=state.yenAvgCosts[h.key]??'';$('#yenCostLabel').textContent=`${h.name} / ${h.account}（現在 ${fmt(h.qty)}株）`;$('#yenCostDialog').showModal();}
  if(b.hasAttribute('data-fetch-price')){const h=displayedHoldings[Number(b.dataset.fetchPrice)];b.disabled=true;$('#quoteStatus').textContent=`${h.name}の価格を取得中…`;try{await updateHoldingPrice(h,true);$('#quoteStatus').textContent=`${h.name}の価格を更新しました（${state.priceDates[h.key]}基準）。`;}catch(error){$('#quoteStatus').textContent=`${h.name}の価格を取得できません：${error.message}。時間をおいて再試行するか「変更」から基準価額を入力してください。`;}finally{b.disabled=false;}}
 });
-$('#saveFx').onclick=()=>commit({...state,fx:Number($('#fxRate').value),fxUpdatedAt:new Date().toISOString()});
+$('#saveFx').onclick=()=>commit({...state,fx:Number($('#fxRate').value),fxUpdatedAt:new Date().toISOString(),fxSource:'manual'});
 function download(content,name){const url=URL.createObjectURL(new Blob([content],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
 $('#exportBtn').onclick=()=>download(blocked?originalRaw:JSON.stringify(state,null,2),'myportfolio-backup-'+today()+'.json');
 $('#importBtn').onclick=()=>$('#importFile').click();
@@ -116,37 +116,37 @@ $('#csvFile').onchange=async e=>{try{
 $('#confirmCsv').onclick=()=>{try{const rows=[...document.querySelectorAll('[data-csv-row]:checked')].map(el=>csvPreview[Number(el.dataset.csvRow)].t);if(!rows.length)throw Error('取込対象が選択されていません');P.holdings([...state.transactions,...rows]);if(commit({...state,transactions:[...state.transactions,...rows]})){$('#csvDialog').close();csvPreview=[];}}catch(e){alert(e.message);}};
 async function quote(symbol){return PortfolioQuotes.quote(symbol);}
 const holdingQuoteRequests=new Map();
-async function updateHoldingPrice(h,force=false){
+async function updateHoldingPrice(h,force=false,suppliedMeta){
  if(!force&&state.prices[h.key]!==undefined)return;
  const symbol=h.assetType==='FUND'?(PortfolioPlanning.fund(h.symbol,h.name)?.[0]||h.symbol):h.market==='JP'?(h.symbol.toUpperCase().endsWith('.T')?h.symbol:h.symbol+'.T'):h.symbol;
  const requestKey=(h.assetType==='FUND'?'fund:':'stock:')+symbol;
- if(!holdingQuoteRequests.has(requestKey))holdingQuoteRequests.set(requestKey,h.assetType==='FUND'?PortfolioQuotes.fundQuote(symbol):quote(symbol));
- let meta;try{meta=await holdingQuoteRequests.get(requestKey);}finally{holdingQuoteRequests.delete(requestKey);}
+ let meta=suppliedMeta;
+ if(!meta){if(!holdingQuoteRequests.has(requestKey))holdingQuoteRequests.set(requestKey,h.assetType==='FUND'?PortfolioQuotes.fundQuote(symbol):quote(symbol));try{meta=await holdingQuoteRequests.get(requestKey);}finally{holdingQuoteRequests.delete(requestKey);}}
  if(meta.currency!==(h.market==='US'?'USD':'JPY'))throw Error('通貨不一致');
  if(!force&&state.prices[h.key]!==undefined)return;
  const asOf=meta.asOf||(meta.regularMarketTime?new Date(meta.regularMarketTime*1000).toLocaleDateString('ja-JP'):'基準日不明');
- if(!commit({...state,prices:{...state.prices,[h.key]:meta.regularMarketPrice},priceDates:{...state.priceDates,[h.key]:asOf}}))throw Error('価格の保存に失敗しました');
+ if(!commit({...state,prices:{...state.prices,[h.key]:meta.regularMarketPrice},priceDates:{...state.priceDates,[h.key]:asOf},manualPrices:state.manualPrices.filter(k=>k!==h.key),autoPriceAt:{...state.autoPriceAt,[h.key]:new Date().toISOString()}}))throw Error('価格の保存に失敗しました');
+ return meta;
 }
 async function quoteJapaneseName(symbol){const path=encodeURIComponent(symbol),endpoints=["https://query1.finance.yahoo.com/v1/finance/search?q="+path+"&lang=ja-JP&region=JP","https://r.jina.ai/http://query1.finance.yahoo.com/v1/finance/search?q="+path+"&lang=ja-JP&region=JP","https://r.jina.ai/http://finance.yahoo.co.jp/quote/"+path];for(const endpoint of endpoints){try{const response=await PortfolioQuotes.request(endpoint,endpoint.startsWith('https://r.jina.ai/')).then(raw=>({ok:true,text:async()=>raw}));if(!response.ok)continue;const raw=await response.text();let data;try{data=JSON.parse(raw);}catch{const begin=raw.indexOf('{'),end=raw.lastIndexOf('}');if(begin>=0&&end>begin){try{data=JSON.parse(raw.slice(begin,end+1));}catch{}}}const quote=data?.quotes?.find(x=>x.symbol===symbol)||data?.quotes?.[0];const name=quote?.shortname||quote?.longname;if(name&&/[\u3040-\u30ff\u3400-\u9fff]/.test(name))return name;const heading=raw.match(/(?:^|\n)#\s*([^\n【：:]+)(?:【|：|:)/)?.[1]?.trim();if(heading&&/[\u3040-\u30ff\u3400-\u9fff]/.test(heading))return heading;}catch{}}return '';}
 const japaneseAliases={'7203':'トヨタ自動車','6758':'ソニーグループ','9984':'ソフトバンクグループ','8306':'三菱UFJフィナンシャル・グループ','9432':'日本電信電話','9433':'KDDI','8058':'三菱商事','6861':'キーエンス','6501':'日立製作所','7267':'本田技研工業','7269':'スズキ','7974':'任天堂','2914':'日本たばこ産業','4502':'武田薬品工業','4063':'信越化学工業','8035':'東京エレクトロン','8411':'みずほフィナンシャルグループ','8316':'三井住友フィナンシャルグループ'};
 $('#refreshPricesBtn').onclick=async()=>{
- const b=$('#refreshPricesBtn'),hs=getHoldings();if(!hs.length){alert('更新対象の保有銘柄がありません。');return;}
- b.disabled=true;const prices={},priceDates={},requests=new Map(),failures=[],fundDates=[];let ok=0,failed=0;
- $('#quoteStatus').textContent='株価を取得中。多数の銘柄は数分かかります。';
- try{for(const h of hs){const symbol=h.assetType==='FUND'?(PortfolioPlanning.fund(h.symbol,h.name)?.[0]||h.symbol):h.market==='JP'?(h.symbol.toUpperCase().endsWith('.T')?h.symbol:h.symbol+'.T'):h.symbol;
-  const requestKey=(h.assetType==='FUND'?'fund:':'stock:')+symbol;
-  try{if(!requests.has(requestKey))requests.set(requestKey,h.assetType==='FUND'?PortfolioQuotes.fundQuote(symbol):quote(symbol));const meta=await requests.get(requestKey);if(meta.currency!==(h.market==='US'?'USD':'JPY'))throw Error('通貨不一致');prices[h.key]=meta.regularMarketPrice;priceDates[h.key]=meta.asOf|| (meta.regularMarketTime?new Date(meta.regularMarketTime*1000).toLocaleDateString('ja-JP'):'基準日不明');if(h.assetType==='FUND')fundDates.push(`${h.name}：${meta.asOf}基準`);ok++;}catch(error){failed++;failures.push(`${h.symbol}（${h.account}）：${error.message}`);}
- $('#quoteStatus').textContent=`${ok+failed}/${hs.length}件確認、${ok}件成功、${failed}件失敗。取得制限を避けながら更新しています。`;
+ const b=$('#refreshPricesBtn'),hs=[...displayedHoldings];if(!hs.length){alert('表示中の保有銘柄がありません。');return;}
+ b.disabled=true;const quotes=new Map(),failures=[];let ok=0,failed=0;
+ $('#quoteStatus').textContent=`表示中の${hs.length}銘柄を更新中。取得できた分から保存します。`;
+ try{for(const h of hs){const symbol=h.assetType==='FUND'?(PortfolioPlanning.fund(h.symbol,h.name)?.[0]||h.symbol):h.market==='JP'?(h.symbol.toUpperCase().endsWith('.T')?h.symbol:h.symbol+'.T'):h.symbol,requestKey=(h.assetType==='FUND'?'fund:':'stock:')+symbol;
+  try{const meta=await updateHoldingPrice(h,true,quotes.get(requestKey));quotes.set(requestKey,meta);ok++;}catch(error){failed++;failures.push(`${h.symbol}（${h.account}）：${error.message}`);}
+  $('#quoteStatus').textContent=`${ok+failed}/${hs.length}件確認、${ok}件保存済み、${failed}件失敗。画面を閉じても保存済みの価格は残ります。`;
  }
- if(ok&&!commit({...state,prices:{...state.prices,...prices},priceDates:{...state.priceDates,...priceDates}}))return;
- $('#quoteStatus').textContent=`${ok}件更新、${failed}件取得失敗。`+(failed?'既存価格は保持しました。失敗銘柄：'+failures.join(' ／ '):'Yahoo Financeの価格（遅延の場合があります）。')+(fundDates.length?' 投信は1万口当たり。'+fundDates.join(' ／ '):'');
+ $('#quoteStatus').textContent=`${ok}件更新、${failed}件取得失敗。`+(failed?'失敗銘柄：'+failures.join(' ／ '):'価格と基準日を確認してください。');
  }finally{b.disabled=false;}
 };
-$('#refreshFx').onclick=async()=>{const b=$('#refreshFx');b.disabled=true;try{const m=await quote('USDJPY=X');if(m.currency!=='JPY')throw Error('通貨不一致');commit({...state,fx:m.regularMarketPrice,fxUpdatedAt:m.regularMarketTime===null?'':new Date(m.regularMarketTime*1000).toISOString()});}catch{$('#fxStatus').textContent='為替取得に失敗しました。ブラウザからの取得制限や通信障害が考えられます。手入力で保存できます。';}finally{b.disabled=false;}};
+$('#copyQuoteSymbolsBtn').onclick=async()=>{const symbols=[...new Set(getHoldings().map(h=>h.assetType==='FUND'?(PortfolioPlanning.fund(h.symbol,h.name)?.[0]||h.symbol):h.market==='JP'?(h.symbol.toUpperCase().endsWith('.T')?h.symbol:h.symbol+'.T'):h.symbol))].sort(),text=symbols.join(', ');try{await navigator.clipboard.writeText(text);$('#quoteStatus').textContent=`銘柄コード${symbols.length}件をコピーしました。数量・口座名は含みません。`;}catch{prompt('この銘柄コード一覧だけをコピーしてください（数量・口座名は含みません）',text);}};
+$('#refreshFx').onclick=async()=>{const b=$('#refreshFx');b.disabled=true;try{const m=await quote('USDJPY=X');if(m.currency!=='JPY')throw Error('通貨不一致');commit({...state,fx:m.regularMarketPrice,fxUpdatedAt:new Date().toISOString(),fxSource:'auto'});}catch{$('#fxStatus').textContent='為替取得に失敗しました。ブラウザからの取得制限や通信障害が考えられます。手入力で保存できます。';}finally{b.disabled=false;}};
 let deferred;
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e;$('#installBtn').hidden=false;});
 $('#installBtn').onclick=async()=>{if(deferred){await deferred.prompt();deferred=null;$('#installBtn').hidden=true;}};
-if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js?v=20260923-fx-basis').then(reg=>{const show=()=>{if(reg.waiting){$('#updateBtn').hidden=false;$('#updateBtn').onclick=()=>{if(confirm('入力中の内容を保存してから更新してください。更新しますか？')){navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload(),{once:true});reg.waiting?.postMessage('ACTIVATE');}};}};show();reg.addEventListener('updatefound',()=>reg.installing?.addEventListener('statechange',show));reg.update().catch(()=>{});}).catch(()=>{$('#notice').textContent+=' オフライン機能を利用できません。';});}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js?v=20260923-scheduled-quotes').then(reg=>{const show=()=>{if(reg.waiting){$('#updateBtn').hidden=false;$('#updateBtn').onclick=()=>{if(confirm('入力中の内容を保存してから更新してください。更新しますか？')){navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload(),{once:true});reg.waiting?.postMessage('ACTIVATE');}};}};show();reg.addEventListener('updatefound',()=>reg.installing?.addEventListener('statechange',show));reg.update().catch(()=>{});}).catch(()=>{$('#notice').textContent+=' オフライン機能を利用できません。';});}
 addEventListener('storage',e=>{if(e.key===KEY)$('#notice').textContent='別のタブでデータが更新されました。再読み込みしてください。';});
 
 for(const id of ['holdingGroup','holdingSort','holdingAccount'])$('#'+id).onchange=render;
@@ -162,6 +162,13 @@ $('#addPlanShortcut').onclick=()=>$('#addPlanBtn').click();
 document.addEventListener('click',e=>{const b=e.target.closest('[data-plan-edit]');if(!b)return;const p=state.plans.find(p=>p.id===b.dataset.planEdit),f=$('#planForm');for(const [k,v] of Object.entries(p)){const el=field(f,k);if(el)el.value=Array.isArray(v)?v.join(','):v;}$('#planDialog').showModal();});
 $('#planForm').onsubmit=e=>{e.preventDefault();try{const d=Object.fromEntries(new FormData(e.currentTarget)),split=v=>v.split(/[,、\s]+/).filter(Boolean);for(const date of [...split(d.skipDates),...split(d.orderedDates),d.start,...(d.end?[d.end]:[])])if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date)throw Error('日付はYYYY-MM-DDで入力してください');if(d.end&&d.end<d.start)throw Error('終了日が開始日より前です');const p={...d,id:d.id||crypto.randomUUID(),name:PortfolioPlanning.fund(d.symbol)[1],amount:Number(d.amount),taxBucket:'tsumitate',orderedDates:split(d.orderedDates),skipDates:split(d.skipDates)};if(commit({...state,accounts:[...new Set([...state.accounts,p.account])],plans:[...state.plans.filter(x=>x.id!==p.id),p]}))$('#planDialog').close();}catch(e){alert(e.message);}};
 fetch('holidays.json').then(r=>{if(!r.ok)throw Error();return r.json();}).then(d=>{holidayDates=d.dates;renderPlans();}).catch(()=>{});
+async function loadQuoteSnapshot(){
+ try{const response=await fetch('quotes-snapshot.json?v='+Date.now(),{cache:'no-store'});if(!response.ok)return;const data=await response.json();if(!data.quotes||typeof data.quotes!=='object')return;
+  const prices={...state.prices},priceDates={...state.priceDates},autoPriceAt={...state.autoPriceAt};let count=0,fx=state.fx,fxUpdatedAt=state.fxUpdatedAt,fxSource=state.fxSource;
+  for(const h of getHoldings()){const symbol=h.assetType==='FUND'?(PortfolioPlanning.fund(h.symbol,h.name)?.[0]||h.symbol):h.market==='JP'?(h.symbol.toUpperCase().endsWith('.T')?h.symbol:h.symbol+'.T'):h.symbol,q=data.quotes[symbol],time=Date.parse(q?.fetchedAt||'');if(!q||!Number.isFinite(q.price)||q.price<=0||q.currency!==(h.market==='US'?'USD':'JPY')||!/^\d{4}-\d{2}-\d{2}$/.test(q.asOf||'')||!Number.isFinite(time)||Date.now()-time>14*86400000||time>Date.now()+300000||state.manualPrices.includes(h.key)||prices[h.key]!==undefined&&!autoPriceAt[h.key]||autoPriceAt[h.key]&&time<=Date.parse(autoPriceAt[h.key]))continue;prices[h.key]=q.price;priceDates[h.key]=q.asOf;autoPriceAt[h.key]=q.fetchedAt;count++;}
+  const currency=data.quotes['USDJPY=X'],currencyTime=Date.parse(currency?.fetchedAt||'');if(currency&&Number.isFinite(currency.price)&&currency.price>0&&currency.currency==='JPY'&&Number.isFinite(currencyTime)&&Date.now()-currencyTime<14*86400000&&fxSource!=='manual'&&(fxSource==='auto'||!fxUpdatedAt)&&(!fxUpdatedAt||currencyTime>Date.parse(fxUpdatedAt))){fx=currency.price;fxUpdatedAt=currency.fetchedAt;fxSource='auto';}
+  if(count||fx!==state.fx){if(commit({...state,prices,priceDates,autoPriceAt,fx,fxUpdatedAt,fxSource}))$('#quoteStatus').textContent=`定期更新された価格を${count}銘柄に反映しました。基準日を確認してください。`;}
+ }catch(error){$('#quoteStatus').textContent='定期更新価格を読み込めませんでした。保存済み価格は保持しています。';}
+}
 render();
-const missingFundPrices=getHoldings().filter(h=>h.assetType==='FUND'&&state.prices[h.key]===undefined&&PortfolioPlanning.fund(h.symbol,h.name));
-if(missingFundPrices.length)(async()=>{for(const h of missingFundPrices){try{$('#quoteStatus').textContent=`未設定の投信 ${h.name} の基準価額を取得中…`;await updateHoldingPrice(h);$('#quoteStatus').textContent=`${h.name} の基準価額を取得しました（${state.priceDates[h.key]}基準）。`;}catch(error){$('#quoteStatus').textContent=`${h.name} の自動取得に失敗：${error.message}。銘柄の「取得」から再試行できます。`;}}})();
+(async()=>{await loadQuoteSnapshot();const missingFundPrices=getHoldings().filter(h=>h.assetType==='FUND'&&state.prices[h.key]===undefined&&PortfolioPlanning.fund(h.symbol,h.name));for(const h of missingFundPrices){try{$('#quoteStatus').textContent=`未設定の投信 ${h.name} の基準価額を取得中…`;await updateHoldingPrice(h);$('#quoteStatus').textContent=`${h.name} の基準価額を取得しました（${state.priceDates[h.key]}基準）。`;}catch(error){$('#quoteStatus').textContent=`${h.name} の自動取得に失敗：${error.message}。銘柄の「取得」から再試行できます。`;}}})();
