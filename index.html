@@ -42,6 +42,11 @@
 <strong id="cashBalance">¥0</strong>
 </article>
 </section>
+<section class="card" aria-labelledby="brokerSummaryTitle">
+<div class="head"><h2 id="brokerSummaryTitle">証券口座別の保有・含み損益</h2></div>
+<p>口座を選ぶと、その口座の銘柄を表示します。価格未設定の銘柄は含み損益から除きます。</p>
+<div id="brokerSummary" class="broker-summary"></div>
+</section>
 <section class="card">
 <div class="head">
 <h2>保有銘柄</h2>
@@ -50,9 +55,10 @@
 <button id="addTxBtn">取引を追加</button>
 </div>
 </div>
-<p id="quoteStatus" role="status">
+<div class="row"><label>表示<select id="holdingGroup"><option value="all">すべて</option><option value="stock">株式・ETF</option><option value="fund">投資信託</option><option value="tsumitate">つみたてNISA・つみたて投資枠</option></select></label><label>並び順<select id="holdingSort"><option value="symbol">ティッカー・コード順</option><option value="name">銘柄名順</option><option value="account">口座順</option><option value="value">評価額が大きい順</option></select></label></div>
+<label>証券口座で絞り込み<select id="holdingAccount"><option value="">全口座</option></select></label><p id="holdingSummary" role="status"></p><p id="quoteStatus" role="status">
 </p>
-<p>米国資産の取得原価も現在の為替で換算します。取得時からの為替差損益、売却益、配当はこの評価損益に含みません。NISAは口座名で分類し、非課税枠は管理しません。</p><div id="holdingsEmpty" class="empty">取引履歴を登録すると保有銘柄が表示されます。</div>
+<p>米国資産の取得原価も現在の為替で換算します。取得時からの為替差損益、売却益、配当はこの評価損益に含みません。NISAの非課税枠は管理しません。</p><div id="holdingsEmpty" class="empty">該当する保有銘柄はありません。</div>
 <div class="scroll">
 <table id="holdingsTable" hidden>
 <thead>
@@ -92,10 +98,10 @@
 <div>
 <button id="csvImportBtn" type="button">CSV取込</button>
 <label class="csv-account">取込先<select id="csvAccount" aria-label="CSV取込先口座"></select></label>
-<input id="csvFile" type="file" accept=".csv,text/csv" hidden>
+<label>取込種類<select id="csvKind"><option value="auto">自動判定</option><option value="FUND">投資信託（1万口単価）</option></select></label><label>口座区分<select id="csvTax"><option value="">CSVの区分を使用</option><option value="tsumitate">NISAつみたて投資枠</option><option value="legacy">旧つみたてNISA</option><option value="growth">NISA成長投資枠</option></select></label><input id="csvFile" type="file" accept=".csv,text/csv" hidden>
 </div>
 </div>
-<p>CSVは共通形式（UTF-8）専用です。証券会社CSVの直接取込は未対応です。列：date,market,side,symbol,name,quantity,price,fee,account,assetType,priceUnit</p>
+<p>UTF-8・Shift-JIS対応。取込前に口数・単価・金額・重複候補を確認できます。対応できない列や取引は保存せずエラーを表示します。</p>
 <div class="scroll">
 <table id="txTable">
 <thead>
@@ -116,14 +122,14 @@
 </div>
 <div id="txEmpty" class="empty">取引履歴はありません。</div>
 </section>
-</main>
+<section class="card"><div class="head"><h2>毎日積立</h2><button id="addPlanBtn">積立設定を登録</button></div><label>表示月<input id="planMonth" type="month"></label><p>予定は保有残高に含めません。約定日・口数・金額はCSV取込で確定します。ファンド固有の休業日は設定の除外日に指定してください。</p><div id="planList"></div></section></main>
 <dialog id="txDialog">
 <form id="txForm">
 <input name="id" type="hidden">
 <h2>取引を追加</h2>
 <label>口座名<select name="account" required></select>
 </label>
-<label>資産種類<select name="assetType">
+<label>口座区分<select name="taxBucket"><option value="">一般・特定など</option><option value="tsumitate">NISAつみたて投資枠</option><option value="legacy">旧つみたてNISA</option><option value="growth">NISA成長投資枠</option></select></label><label>投信の候補<select id="fundPreset"><option value="">候補を選ぶ（任意）</option></select></label><label>資産種類<select name="assetType">
 <option value="STOCK_JP">日本株</option>
 <option value="STOCK_US">米国株</option>
 <option value="FUND">投資信託</option>
@@ -159,7 +165,7 @@
 <label>約定単価<input name="price" type="number" min="0" step="any" required>
 </label>
 </div>
-<label>手数料<input name="fee" type="number" min="0" step="any" value="0">
+<label>約定金額（投信・任意）<input name="amount" type="number" min="0" step="any"></label><label>手数料<input name="fee" type="number" min="0" step="any" value="0">
 </label>
 <div class="actions">
 <button type="button" data-close>キャンセル</button>
@@ -207,10 +213,12 @@
 </div>
 </form>
 </dialog>
-<footer>データはこの端末のブラウザ内にのみ保存されます。バックアップを定期的に保存してください。</footer>
+<dialog id="planDialog"><form id="planForm"><h2>毎営業日の積立設定</h2><input name="id" type="hidden"><label>口座名<input name="account" value="楽天証券" required></label><label>投資信託<select name="symbol" id="planFund"></select></label><label>毎営業日の金額（円）<input name="amount" type="number" min="1" value="500" required></label><label>予定管理の開始日<input name="start" type="date" required></label><label>終了日（任意）<input name="end" type="date"></label><label>注文済みの日（カンマ区切り）<input name="orderedDates" placeholder="2026-09-18"></label><label>ファンド休業日・積立しない日（カンマ区切り）<input name="skipDates" placeholder="2026-12-25"></label><p>楽天証券での注文操作は行いません。過去の買付実績はCSVから登録してください。</p><div class="actions"><button type="button" data-close>キャンセル</button><button>保存</button></div></form></dialog>
+<dialog id="csvDialog"><div class="preview"><h2>CSV取込の確認</h2><p id="csvSummary"></p><p>重複候補は選択を外しています。同日同額の別取引は明細と照合して選択してください。金額は手数料を除く約定金額です。</p><div class="scroll"><table><thead><tr><th>取込</th><th>日付・銘柄</th><th>区分</th><th>口数・数量</th><th>単価</th><th>約定金額</th><th>手数料</th></tr></thead><tbody id="csvRows"></tbody></table></div><div class="actions"><button type="button" data-close>キャンセル</button><button id="confirmCsv">選択した取引を確定</button></div></div></dialog><footer>データはこの端末のブラウザ内にのみ保存されます。バックアップを定期的に保存してください。</footer>
 <script src="core.js">
 </script>
 <script src="quotes.js"></script>
+<script src="planning.js"></script>
 <script src="app.js">
 </script>
 </body>

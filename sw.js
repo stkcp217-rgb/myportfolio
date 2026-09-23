@@ -1,5 +1,5 @@
-const CACHE='myportfolio-v8-fund-nav';
-const FILES=['./','index.html','styles.css','core.js','quotes.js','app.js','manifest.webmanifest'];
+const CACHE='myportfolio-v9-broker-plans';
+const FILES=['./','index.html','styles.css','core.js','quotes.js','planning.js','holidays.json','app.js','manifest.webmanifest'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES))));
 self.addEventListener('message',event=>{if(event.data==='ACTIVATE')self.skipWaiting();});
 self.addEventListener('activate',event=>event.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('myportfolio-')&&k!==CACHE).map(k=>caches.delete(k)))),self.clients.claim()])));

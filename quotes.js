@@ -1,7 +1,7 @@
 (function(root){
 'use strict';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-let queue=Promise.resolve(),nextRelay=0;
+let queue=Promise.resolve(),nextRelay=0,directUnavailable=false;
 async function request(url,relay){
  const run=async()=>{
   if(relay)await sleep(Math.max(0,nextRelay-Date.now()));
@@ -40,7 +40,8 @@ async function quote(symbol){
  const path=encodeURIComponent(symbol),target='query1.finance.yahoo.com/v8/finance/chart/'+path+'?range=5d&interval=1d';
  const errors=[];
  for(const [url,relay] of [['https://'+target,false],['https://r.jina.ai/http://'+target,true]]){
-  try{return parse(await request(url,relay),symbol);}catch(error){errors.push((relay?'中継':'直接')+': '+error.message);}
+  if(!relay&&directUnavailable)continue;
+  try{return parse(await request(url,relay),symbol);}catch(error){errors.push((relay?'中継':'直接')+': '+error.message);if(!relay&&/CORS制限|通信失敗/.test(error.message))directUnavailable=true;}
  }
  throw Error(errors.join(' / '));
 }
