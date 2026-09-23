@@ -19,6 +19,7 @@
 <button id="exportBtn" type="button">バックアップ</button>
 <button id="importBtn" type="button">復元</button>
 <button id="manageAccountsBtn" type="button">口座を管理</button>
+<button id="addPlanShortcut" type="button">積立設定</button>
 <input id="importFile" type="file" accept="application/json" hidden>
 <button id="installBtn" hidden type="button">ホーム画面に追加</button>
 </div>
@@ -34,7 +35,7 @@
 <small id="updatedAt">未更新</small>
 </article>
 <article>
-<span>評価損益（税引前・含み損益のみ）</span>
+<span>評価損益（株式・投信・米ドル現金）</span>
 <strong id="profitLoss">¥0</strong>
 </article>
 <article>
@@ -44,7 +45,7 @@
 </section>
 <section class="card" aria-labelledby="brokerSummaryTitle">
 <div class="head"><h2 id="brokerSummaryTitle">証券口座別の保有・含み損益</h2></div>
-<p>口座を選ぶと、その口座の銘柄を表示します。価格未設定の銘柄は含み損益から除きます。</p>
+<p>口座を選ぶと、その口座の銘柄を表示します。同じ口座の現金も評価額に含みます。価格未設定の銘柄は含み損益から除きます。</p>
 <div id="brokerSummary" class="broker-summary"></div>
 </section>
 <section class="card">
@@ -58,7 +59,7 @@
 <div class="row"><label>表示<select id="holdingGroup"><option value="all">すべて</option><option value="stock">株式・ETF</option><option value="fund">投資信託</option><option value="tsumitate">つみたてNISA・つみたて投資枠</option></select></label><label>並び順<select id="holdingSort"><option value="symbol">ティッカー・コード順</option><option value="name">銘柄名順</option><option value="account">口座順</option><option value="value">評価額が大きい順</option></select></label></div>
 <label>証券口座で絞り込み<select id="holdingAccount"><option value="">全口座</option></select></label><p id="holdingSummary" role="status"></p><p id="quoteStatus" role="status">
 </p>
-<p>米国資産の取得原価も現在の為替で換算します。取得時からの為替差損益、売却益、配当はこの評価損益に含みません。NISAの非課税枠は管理しません。</p><div id="holdingsEmpty" class="empty">該当する保有銘柄はありません。</div>
+<p>米国資産の円換算損益には買付時の為替を使用します。未入力の買付分は現在の為替で暫定換算します。売却益、配当、NISAの非課税枠は管理しません。</p><div id="holdingsEmpty" class="empty">該当する保有銘柄はありません。</div>
 <div class="scroll">
 <table id="holdingsTable" hidden>
 <thead>
@@ -68,7 +69,7 @@
 <th>平均取得</th>
 <th>現在値</th>
 <th>評価額</th>
-<th>損益</th>
+<th>損益（円換算）</th>
 <th>
 </th>
 </tr>
@@ -88,6 +89,7 @@
 </div>
 <p id="fxStatus" role="status">
 </p>
+<p id="cashFxSummary"></p>
 <p>現金は手入力の残高です。売買による自動増減はありません。</p>
 <div id="cashList" class="cash-list">
 </div>
@@ -122,7 +124,7 @@
 </div>
 <div id="txEmpty" class="empty">取引履歴はありません。</div>
 </section>
-<section class="card"><div class="head"><h2>毎日積立</h2><button id="addPlanBtn">積立設定を登録</button></div><label>表示月<input id="planMonth" type="month"></label><p>予定は保有残高に含めません。約定日・口数・金額はCSV取込で確定します。ファンド固有の休業日は設定の除外日に指定してください。</p><div id="planList"></div></section></main>
+<section class="card" id="dailyPlan"><div class="head"><h2>毎日積立</h2><button id="addPlanBtn">積立設定を登録</button></div><label>表示月<input id="planMonth" type="month"></label><p>予定は保有残高に含めません。約定日・口数・金額はCSV取込で確定します。ファンド固有の休業日は設定の除外日に指定してください。</p><div id="planList"></div></section></main>
 <dialog id="txDialog">
 <form id="txForm">
 <input name="id" type="hidden">
@@ -167,6 +169,7 @@
 </div>
 <label>約定金額（投信・任意）<input name="amount" type="number" min="0" step="any"></label><label>手数料<input name="fee" type="number" min="0" step="any" value="0">
 </label>
+<label id="txFxLabel" hidden>米国株の買付時ドル円（円 / USD）<input name="fxRate" type="number" min="0.01" step="any"><small>証券会社の約定明細にある適用為替を入力。空欄なら円換算損益は概算です。</small></label>
 <div class="actions">
 <button type="button" data-close>キャンセル</button>
 <button>保存</button>
@@ -185,6 +188,7 @@
 </label>
 <label>残高<input name="amount" type="number" step="any" required>
 </label>
+<input name="editIndex" type="hidden"><label id="cashFxLabel" hidden>残っている米ドルの平均取得レート（円 / USD）<input name="fxRate" type="number" min="0.01" step="any"><small>複数回購入した場合は残高に対応する平均レート。未入力なら為替損益は未算出です。</small></label>
 <div class="actions">
 <button type="button" data-close>キャンセル</button>
 <button>保存</button>
@@ -213,8 +217,9 @@
 </div>
 </form>
 </dialog>
+<dialog id="yenCostDialog"><form id="yenCostForm"><h2>円建て平均取得単価</h2><input name="key" type="hidden"><p id="yenCostLabel"></p><label>1株当たりの平均取得単価（円）<input name="yenAvgCost" type="number" min="0.01" step="any" required></label><p>証券会社に表示される円建て平均取得単価を入力します。登録解除すると買付取引の為替レートから計算します。</p><div class="actions"><button type="button" data-close>キャンセル</button><button type="button" id="clearYenCost">登録解除</button><button>保存</button></div></form></dialog>
 <dialog id="planDialog"><form id="planForm"><h2>毎営業日の積立設定</h2><input name="id" type="hidden"><label>口座名<input name="account" value="楽天証券" required></label><label>投資信託<select name="symbol" id="planFund"></select></label><label>毎営業日の金額（円）<input name="amount" type="number" min="1" value="500" required></label><label>予定管理の開始日<input name="start" type="date" required></label><label>終了日（任意）<input name="end" type="date"></label><label>注文済みの日（カンマ区切り）<input name="orderedDates" placeholder="2026-09-18"></label><label>ファンド休業日・積立しない日（カンマ区切り）<input name="skipDates" placeholder="2026-12-25"></label><p>楽天証券での注文操作は行いません。過去の買付実績はCSVから登録してください。</p><div class="actions"><button type="button" data-close>キャンセル</button><button>保存</button></div></form></dialog>
-<dialog id="csvDialog"><div class="preview"><h2>CSV取込の確認</h2><p id="csvSummary"></p><p>重複候補は選択を外しています。同日同額の別取引は明細と照合して選択してください。金額は手数料を除く約定金額です。</p><div class="scroll"><table><thead><tr><th>取込</th><th>日付・銘柄</th><th>区分</th><th>口数・数量</th><th>単価</th><th>約定金額</th><th>手数料</th></tr></thead><tbody id="csvRows"></tbody></table></div><div class="actions"><button type="button" data-close>キャンセル</button><button id="confirmCsv">選択した取引を確定</button></div></div></dialog><footer>データはこの端末のブラウザ内にのみ保存されます。バックアップを定期的に保存してください。</footer>
+<dialog id="csvDialog"><div class="preview"><h2>CSV取込の確認</h2><p id="csvSummary"></p><p>重複候補は選択を外しています。同日同額の別取引は明細と照合して選択してください。金額は手数料を除く約定金額です。米国株は為替レートがない場合、円換算損益が概算になります。</p><div class="scroll"><table><thead><tr><th>取込</th><th>日付・銘柄</th><th>区分</th><th>口数・数量</th><th>単価</th><th>約定金額</th><th>買付時為替</th><th>手数料</th></tr></thead><tbody id="csvRows"></tbody></table></div><div class="actions"><button type="button" data-close>キャンセル</button><button id="confirmCsv">選択した取引を確定</button></div></div></dialog><footer>データはこの端末のブラウザ内にのみ保存されます。バックアップを定期的に保存してください。</footer>
 <script src="core.js">
 </script>
 <script src="quotes.js"></script>

@@ -1,4 +1,4 @@
-const CACHE='myportfolio-v9-broker-plans';
+const CACHE='myportfolio-v10-fx-basis';
 const FILES=['./','index.html','styles.css','core.js','quotes.js','planning.js','holidays.json','app.js','manifest.webmanifest'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES))));
 self.addEventListener('message',event=>{if(event.data==='ACTIVATE')self.skipWaiting();});
